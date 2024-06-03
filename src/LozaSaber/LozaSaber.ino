@@ -31,37 +31,8 @@
    YouTube channel: https://www.youtube.com/channel/UCNEOyqhGzutj-YS-d5ckYdg?sub_confirmation=1
    Author: MadGyver
 */
-
-// ---------------------------- SETTINGS -------------------------------
-#define NUM_LEDS 50//144         // number of microcircuits WS2811 on LED strip (note: one WS2811 controls 3 LEDs!)
-#define BTN_TIMEOUT 800     // button hold delay, ms
-#define BRIGHTNESS 100//255      // max LED brightness (0 - 255)
-
-#define SWING_TIMEOUT 500   // timeout between swings
-#define SWING_L_THR 150     // swing angle speed threshold
-#define SWING_THR 300       // fast swing angle speed threshold
-#define STRIKE_THR 150      // hit acceleration threshold
-#define STRIKE_S_THR 320    // hard hit acceleration threshold
-#define FLASH_DELAY 80      // flash time while hit
-
-#define PULSE_ALLOW 1       // blade pulsation (1 - allow, 0 - disallow)
-#define PULSE_AMPL 20       // pulse amplitude
-#define PULSE_DELAY 30      // delay between pulses
-
-#define R1 100000           // voltage divider real resistance
-#define R2 51000            // voltage divider real resistance
-#define BATTERY_SAFE 1      // battery monitoring (1 - allow, 0 - disallow)
-
-#define DEBUG 1             // debug information in Serial (1 - allow, 0 - disallow)
-// ---------------------------- SETTINGS -------------------------------
-
-#define LED_PIN 6
-#define BTN 3
-#define IMU_GND A1
-#define SD_GND A0
-#define VOLT_PIN A6
-#define BTN_LED 4
-
+///////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////
 // -------------------------- LIBS ---------------------------
 #include <avr/pgmspace.h>   // PROGMEM library
 #include <SD.h>
@@ -72,15 +43,48 @@
 #include <toneAC.h>         // hum generation library
 #include "FastLED.h"        // addressable LED library
 #include <EEPROM.h>
+///////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////
+
+// ------------------------- CONFIGURATIONS ----------------------------
+#define DIVIDE_LED_STRIP          1             // divide LED STRIP in two parts (1 - allow, 0 - disallow)
+#define DEBUG                     0             // debug information in Serial (1 - allow, 0 - disallow)
+#define BATTERY_SAFE              1             // battery monitoring (1 - allow, 0 - disallow)
+#define PULSE_ALLOW               1             // blade pulsation (1 - allow, 0 - disallow)
+// ---------------------------- SETTINGS -------------------------------
+#define NUM_LEDS                  60//144       // number of microcircuits WS2811 on LED strip (note: one WS2811 controls 3 LEDs!)
+#define BTN_TIMEOUT               800           // button hold delay, ms
+#define BRIGHTNESS                100//255      // max LED brightness (0 - 255)
+#define LIHGT_UP_DOWN_DELAY_TIME  20//25
+#define MIN_WORKING_VOLTAGE       6             // Min 6v to work
+#define AUDIO_VOLUME              5
+
+#define SWING_TIMEOUT             500           // timeout between swings
+#define SWING_L_THR               150           // swing angle speed threshold
+#define SWING_THR                 300           // fast swing angle speed threshold
+#define STRIKE_THR                150           // hit acceleration threshold
+#define STRIKE_S_THR              320           // hard hit acceleration threshold
+#define FLASH_DELAY               80            // flash time while hit
+
+#define PULSE_AMPL                20            // pulse amplitude
+#define PULSE_DELAY               30            // delay between pulses
+
+#define R1                        1000          // (1K ohms) voltage divider real resistance
+#define R2                        464           // (464 ohms) voltage divider real resistance
+
+// ---------------------------- PINOUT -------------------------------
+#define LED_PIN 6
+#define BTN 3
+#define IMU_GND A1
+#define SD_GND A0
+#define VOLT_PIN A6
+#define BTN_LED 4
 
 CRGB leds[NUM_LEDS];
 //#define SD_ChipSelectPin 10
 const int chipSelect = 8;
 TMRpcm tmrpcm;
 MPU6050 accelgyro;
-// -------------------------- LIBS ---------------------------
-
-
 // ------------------------------ VARIABLES ---------------------------------
 int16_t ax, ay, az;
 int16_t gx, gy, gz;
@@ -157,10 +161,7 @@ char BUFFER[10];
 // --------------------------------- SOUNDS ---------------------------------
 
 void setup() {
-  //FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
-  //FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
   FastLED.addLeds<WS2811, LED_PIN, GRB>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-  //FastLED.setBrightness(100);  // ~40% of LED strip brightness
   FastLED.setBrightness(20);  // ~40% of LED strip brightness
   setAll(0, 0, 0);             // and turn it off
 
@@ -190,7 +191,7 @@ void setup() {
 
   // SD initialization
   tmrpcm.speakerPin = 9;
-  tmrpcm.setVolume(5);
+  tmrpcm.setVolume(AUDIO_VOLUME);
   tmrpcm.quality(1);
   if (DEBUG) {
     if (SD.begin(8)) Serial.println(F("SD OK"));
@@ -213,6 +214,7 @@ void setup() {
     Serial.print(F("Now COLOR: "));
     Serial.println(nowColor);
   }
+  /*
   byte capacity = voltage_measure();       // get battery level
   capacity = map(capacity, 100, 0, (NUM_LEDS / 2 - 1), 1);  // convert into blade lenght
   if (DEBUG) {
@@ -227,6 +229,7 @@ void setup() {
     delay(25);
   }
   delay(1000);                         // 1 second to show battery level
+  */
   setAll(0, 0, 0);
   FastLED.setBrightness(BRIGHTNESS);   // set bright
 }
@@ -239,7 +242,7 @@ void loop() {
   btnTick();
   strikeTick();
   swingTick();
-  batteryTick();
+  //batteryTick();
 }
 // --- MAIN LOOP---
 
@@ -290,7 +293,7 @@ void btnTick() {
 void on_off_sound() {
   if (ls_chg_state) {                // if change flag
     if (!ls_state) {                 // if GyverSaber is turned off
-      if (voltage_measure() > 10 || !BATTERY_SAFE) {
+      if (voltage_measure() || !BATTERY_SAFE) {
         if (DEBUG) Serial.println(F("SABER ON"));
         tmrpcm.play("ON.wav");
         delay(200);
@@ -470,20 +473,36 @@ void setAll(byte red, byte green, byte blue) {
 }
 
 void light_up() {
-  for (char i = 0; i <= (NUM_LEDS / 2 - 1); i++) {
-    setPixel(i, red, green, blue);
-    setPixel((NUM_LEDS - 1 - i), red, green, blue);
-    FastLED.show();
-    delay(25);
+  if(!DIVIDE_LED_STRIP){
+    for (char i = 0; i <= (NUM_LEDS - 1); i++) {
+      setPixel(i, red, green, blue);
+      FastLED.show();
+      delay(LIHGT_UP_DOWN_DELAY_TIME);
+    }
+  }else{
+    for (char i = 0; i <= (NUM_LEDS / 2 - 1); i++) {
+      setPixel(i, red, green, blue);
+      setPixel((NUM_LEDS - 1 - i), red, green, blue);
+      FastLED.show();
+      delay(LIHGT_UP_DOWN_DELAY_TIME);
+    }
   }
 }
 
 void light_down() {
-  for (char i = (NUM_LEDS / 2 - 1); i >= 0; i--) {
-    setPixel(i, 0, 0, 0);
-    setPixel((NUM_LEDS - 1 - i), 0, 0, 0);
-    FastLED.show();
-    delay(25);
+  if(!DIVIDE_LED_STRIP){
+    for (char i = (NUM_LEDS - 1); i >= 0; i--) {
+      setPixel(i, 0, 0, 0);
+      FastLED.show();
+      delay(LIHGT_UP_DOWN_DELAY_TIME);
+    }
+  }else{
+    for (char i = (NUM_LEDS / 2 - 1); i >= 0; i--) {
+      setPixel(i, 0, 0, 0);
+      setPixel((NUM_LEDS - 1 - i), 0, 0, 0);
+      FastLED.show();
+      delay(LIHGT_UP_DOWN_DELAY_TIME);
+    }
   }
 }
 
@@ -531,28 +550,33 @@ void setColor(byte color) {
 
 void batteryTick() {
   if (millis() - battery_timer > 30000 && ls_state && BATTERY_SAFE) {
-    if (voltage_measure() < 15) {
+    if (voltage_measure()) {
       ls_chg_state = 1;
+    }
+    else{
+      if (DEBUG) Serial.println(F(" VOLTAGE LOW: batteryTick"));
     }
     battery_timer = millis();
   }
 }
 
-byte voltage_measure() {
+bool voltage_measure() {
+  int roundVolt = 0;
   voltage = 0;
   for (int i = 0; i < 10; i++) {
     voltage += (float)analogRead(VOLT_PIN) * 5 / 1023 * (R1 + R2) / R2;
   }
   voltage = voltage / 10;
-  int volts = voltage / 3 * 100;    // 3 cells!!!
-  if (volts > 387)
-    return map(volts, 420, 387, 100, 77);
-  else if ((volts <= 387) && (volts > 375) )
-    return map(volts, 387, 375, 77, 54);
-  else if ((volts <= 375) && (volts > 368) )
-    return map(volts, 375, 368, 54, 31);
-  else if ((volts <= 368) && (volts > 340) )
-    return map(volts, 368, 340, 31, 8);
-  else if (volts <= 340)
-    return map(volts, 340, 260, 8, 0);
+  roundVolt = round(voltage);
+    if (DEBUG) {
+    Serial.print(F("voltage: "));
+    Serial.println(voltage);
+    Serial.print(F("----------------\n"));
+    Serial.print(F("roundVolt: "));
+    Serial.println(roundVolt);
+  }
+  if(roundVolt > MIN_WORKING_VOLTAGE)
+    return true;
+
+  return false;
 }
